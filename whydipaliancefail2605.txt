@@ -1,0 +1,27 @@
+Why CASCADE RINSE5 Always FAILs
+The actual dip (587–594s) exceeds max dip (300s). This is not a software bug — it's a plant design constraint conflict.
+
+The Structural Problem
+After the wagon places a load in CASCADE RINSE5, it cannot come back within 300s because it is forced to do this work first:
+
+
+Wagon drops Load N into CASCADE RINSE5
+  → picks up Load N from ZINC (750s dip, already overdue)
+  → delivers Load N to CASCADE RINSE5       ← this IS the next load arriving
+  → NOW comes back to pick up Load N-1 from CASCADE RINSE5
+That round-trip takes ~587–594s, which is longer than the 300s max.
+
+Why It Cannot Be Fixed by the Scheduler
+Factor	Value
+ZINC dip time	750s
+Cycle time	375s
+CASCADE RINSE5 max dip	300s
+Wagon count	1
+With a single wagon and a 375s cycle, the wagon must service ZINC every 375s. After dropping a load in CASCADE RINSE5 it immediately has to go handle ZINC for the next load — that alone takes longer than 300s.
+
+Fix Options (Plant Engineering Decision)
+Increase CASCADE RINSE5 max_dip to ≥ 600s in the input CSV (if chemistry allows)
+Add a second wagon to overlap servicing
+Reduce ZINC dip time to bring cycle time below 150s (unlikely feasible)
+The scheduler is working correctly — it picks up CASCADE RINSE5 as early as it possibly can. The station's 300s max is simply incompatible with the current plant layout and single-wagon constraint.
+

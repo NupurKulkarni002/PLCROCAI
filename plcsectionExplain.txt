@@ -1,0 +1,93 @@
+i  want to change the output of send to plc section in gui 
+1) after click on send sequence to plc button it gives some data below .but it is not understandable to me.
+2) can you explain me that .
+3) dont change in code just explain me ?
+
+Searched for "send sequence to plc"
+Viewed streamlit_app.py:451-1250
+Viewed plc_bridge.py:1-334
+
+The data you are seeing below the **"▶️ Send Sequence to PLC"** button is an **Execution Log**. This log shows the step-by-step communication between your Python scheduler and the PLC (Programmable Logic Controller) that operates the hoists in your plant.
+
+Since you likely have the **"Dry Run (test without PLC)"** checkbox checked by default, the script is simulating sending these commands without connecting to actual hardware.
+
+Here is a breakdown of what that data means.
+
+### 1. The Startup Messages
+When you first click the button, you might see lines like:
+> `INFO [DRY RUN] Skipping PLC connection to 192.168.1.10:502`
+> `INFO Loaded 45 instructions. Starting from SR#1.`
+
+- This means the app is in test mode, ignoring the real network connection. It has loaded all the scheduling instructions (e.g., 45 steps) starting from the very first step (`SR#1`).
+
+### 2. The Core Instruction Line
+The most common output you see looks like this:
+> `SR#001 | Get from | Value=1 | Load=1 | FB1 | T=10s`
+
+This is a specific command being sent to the crane. Here is what each part of that line means:
+* **`SR#001` (Serial/Step Number):** This is the instruction sequence number. It represents "Step 1" in your Master Instruction list.
+* **`Get from` (Instruction Type):** This is the action the hoist must perform. Typical actions are `"Get from"` (pick up), `"Put on"` (drop off), or `"Wait for sec"` (pause hovering above the tank). 
+* **`Value=1` (Instruction Parameter):** The specific target for the action above. If the action is `"Get from"` or `"Put on"`, this represents the **Tank/Station Number** (e.g., Station 1). If the action is `"Wait for sec"`, this represents **how many seconds** the hoist should wait.
+* **`Load=1` (Load Number):** The ID of the specific batch/load of material currently being processed. (If it shows 0, it means the hoist is moving empty).
+* **`FB1` (FlightBar):** The ID of the physical hanger or barrel (FlightBar 1) that is carrying the load.
+* **`T=10s` (Accumulated Time):** The predicted simulation timeline. It means this instruction is scheduled to execute 10 seconds into the total cycle.
+
+### 3. The Follow-up Messages
+After each instruction line, you will see it followed by:
+> `INFO [DRY RUN] SR#001 registers written (simulated)`
+> `INFO SR#001 DONE`
+
+- **Registers Written:** Confirms that the specific numbers (like instruction type, tank number, and flightbar) were successfully "written" into the PLC's memory slots (registers).
+- **DONE:** Confirms that the PLC reported back saying, *"I have successfully finished moving the hoist for Step 1."*
+
+### 4. Completion
+At the very bottom when the text stops scrolling, you will see a final line:
+> `INFO Sequence complete. X instructions executed.`
+
+This indicates the entire production run is finished and the hoists have completed all scheduled dips successfully! 
+
+*(No code has been altered in your project per your request, this is just an explanation of the terminal output!)*
+
+
+Numeric Command Codes
+Register Mapping
+Structured Packets
+State Machines
+what concept is used in this existing system?
+
+
+
+Based on the 
+
+plc_bridge.py
+ code in your system, your architecture relies heavily on Register Mapping, Numeric Command Codes, and State Machines. Structured Packets are used under the hood by the protocol itself, but they are handled automatically by the library.
+
+Here is how each concept is specifically applied in your existing system:
+
+1. Register Mapping (Heavily Used)
+Your system's primary method for sharing data with the PLC is through a shared memory map called Holding Registers. Instead of sending complex text files, Python assigns specific data fields to numbered memory slots (addresses).
+
+Code Example from your system:
+HR[0] is assigned to R_INSTRUCTION_TYPE
+HR[1] is assigned to R_INSTRUCTION_VALUE
+HR[10] is assigned to R_PLC_READY Python "writes" to slots 0-6 to give commands, and "reads" from slots 10-13 to get feedback.
+2. Numeric Command Codes (Heavily Used)
+PLCs operate much faster with raw numbers than with English text. Your system translates human-readable commands into numeric codes before sending them to the PLC's registers.
+
+Code Example from your system:
+"Get from" becomes the number 1
+"Put on" becomes the number 2
+"Wait for sec" becomes the number 3 When Python wants the hoist to pick something up, it doesn't send the word "Get", it places a 1 into Holding Register 0. Likewise, the PLC replies with numbers for its status (0=Idle, 1=Executing, 2=Done).
+3. State Machines (Heavily Used)
+The communication relies on a basic Handshake State Machine to ensure the Python script and the mechanical PLC stay perfectly synchronized without tripping over each other.
+
+State Flow Example from your system:
+Python waits for the PLC to be in the Ready state (PLC_READY == 1).
+Python writes the data and transitions the system by setting CMD_EXECUTE = 1.
+The PLC moves into an Executing state.
+Python waits in a polling loop until the PLC transitions to the Done state (CMD_DONE == 1).
+Python resets the CMD_EXECUTE flag, and the PLC resets back to the Ready state.
+4. Structured Packets (Handled by the Library)
+A "Structured Packet" means taking all variables, squishing them together into a single tightly packed stream of bytes (like [0x01][0x04][0x0A][0x00]), and sending it over the network.
+
+In your system: You are not manually building these packets in your Python code. Instead, you are using the pymodbus library. When you tell the library to change HR[0] to 1, the Modbus TCP protocol under the hood automatically builds a structured packet, adds the TCP/IP headers, and fires it over the ethernet cable. From your code's perspective, it treats the connection purely as a Register Map.

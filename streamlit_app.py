@@ -18,6 +18,11 @@ import io
 import time
 from collections import Counter
 import base64
+import cv2
+import sklearn
+import matplotlib
+import seaborn
+import google.generativeai
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIGURATION
